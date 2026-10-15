@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Caché vs base de datos</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --fondo: #ffffff;
+            --texto: #1b1f27;
+            --gris: #858b96;
+            --linea: #e8e9ec;
+            --sin-cache: #a3a9b3;
+            --con-cache: #2a54e8;
+        }
+
+        * { box-sizing: border-box; }
+
+        body {
+            margin: 0;
+            background: var(--fondo);
+            color: var(--texto);
+            font-family: "Geist", system-ui, sans-serif;
+            line-height: 1.55;
+            font-variant-numeric: tabular-nums;
+        }
+
+        main {
+            max-width: 680px;
+            margin: 0 auto;
+            padding: 72px 20px 96px;
+        }
+
+        h1 { font-size: 30px; font-weight: 500; letter-spacing: -0.02em; margin: 0 0 8px; }
+        h2 { font-size: 15px; font-weight: 500; margin: 0; }
+        .intro { color: var(--gris); margin: 0 0 40px; max-width: 52ch; }
+
+        .botones { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+
+        button, .boton {
+            font: inherit;
+            font-size: 15px;
+            border-radius: 6px;
+            padding: 9px 16px;
+            cursor: pointer;
+            border: 1px solid var(--texto);
+            background: var(--fondo);
+            color: var(--texto);
+            text-decoration: none;
+        }
+        button.oscuro { background: var(--texto); color: var(--fondo); }
+        button.simple { border-color: transparent; color: var(--gris); padding-inline: 8px; }
+        button.simple:hover { color: var(--texto); }
+        button:disabled { opacity: .45; cursor: progress; }
+        button:focus-visible, .boton:focus-visible { outline: 2px solid var(--con-cache); outline-offset: 2px; }
+
+        #mensaje { min-height: 24px; margin: 14px 0 0; color: var(--gris); font-size: 14px; }
+        #mensaje.error { color: #c2362b; }
+
+        .comparacion { margin-top: 56px; }
+        .fila { padding: 22px 0; border-top: 1px solid var(--linea); }
+        .fila:last-of-type { border-bottom: 1px solid var(--linea); }
+        .fila-arriba { display: flex; justify-content: space-between; align-items: baseline; gap: 16px; }
+        .detalle { color: var(--gris); font-size: 13px; }
+
+        .tiempo { font-size: 44px; font-weight: 300; letter-spacing: -0.03em; line-height: 1; white-space: nowrap; }
+        .tiempo small { font-size: 16px; color: var(--gris); margin-left: 4px; letter-spacing: 0; }
+
+        .pista { height: 6px; margin-top: 16px; background: var(--linea); border-radius: 3px; overflow: hidden; }
+        .barra { height: 100%; width: 0; border-radius: 3px; transition: width .5s ease; }
+
+        #diferencia { margin: 22px 0 0; font-size: 18px; min-height: 28px; }
+        #diferencia strong { font-weight: 600; color: var(--con-cache); }
+
+        .cabecera-historial {
+            display: flex; justify-content: space-between; align-items: center;
+            flex-wrap: wrap; gap: 10px; margin: 64px 0 12px;
+        }
+        .exportar { display: flex; gap: 8px; align-items: center; }
+        .exportar span { color: var(--gris); font-size: 14px; margin-right: 4px; }
+        .exportar .boton { font-size: 14px; padding: 6px 12px; }
+
+        #historial { list-style: none; margin: 0; padding: 0; font-size: 14px; }
+        #historial li {
+            display: grid; grid-template-columns: 1fr auto auto; gap: 24px;
+            padding: 8px 0; border-top: 1px solid var(--linea);
+        }
+        .punto { display: inline-block; width: 7px; height: 7px; border-radius: 50%; margin-right: 10px; vertical-align: 1px; }
+        .hora { color: var(--gris); }
+        .ms { min-width: 90px; text-align: right; }
+        #vacio { color: var(--gris); font-size: 14px; border-top: 1px solid var(--linea); padding-top: 10px; margin: 0; }
+
+        details { margin-top: 48px; font-size: 14px; }
+        summary { cursor: pointer; color: var(--gris); }
+        table { width: 100%; border-collapse: collapse; margin-top: 14px; }
+        th, td { text-align: left; padding: 7px 0; border-top: 1px solid var(--linea); }
+        th { font-weight: 500; color: var(--gris); }
+        .derecha { text-align: right; }
+
+        @media (max-width: 520px) {
+            main { padding-top: 48px; }
+            .tiempo { font-size: 34px; }
+            #historial li { grid-template-columns: 1fr auto; }
+            .hora { display: none; }
+            button.simple { padding-left: 0; }
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+            .barra { transition: none; }
+        }
+    </style>
+</head>
+<body>
+<main>
+    <h1>Caché vs base de datos</h1>
+    <p class="intro">
+        Cada carga lee 100 000 productos. Compara cuánto tarda ir a la base de datos
+        frente a devolver el resultado guardado en la caché de Spring.
+    </p>
+
+    <div class="botones">
+        <button class="oscuro" onclick="leer('sin-cache')">Leer sin caché</button>
+        <button onclick="leer('con-cache')">Leer con caché</button>
+        <button class="simple" onclick="vaciarCache()">Vaciar caché</button>
+    </div>
+    <p id="mensaje">Haz unas cuantas cargas de cada tipo para ver la diferencia.</p>
+
+    <section class="comparacion">
+        <div class="fila">
+            <div class="fila-arriba">
+                <div>
+                    <div>Sin caché</div>
+                    <div class="detalle" id="detalleSin">Sin cargas</div>
+                </div>
+                <div class="tiempo" id="promedioSin">—</div>
+            </div>
+            <div class="pista"><div class="barra" id="barraSin" style="background: var(--sin-cache)"></div></div>
+        </div>
+        <div class="fila">
+            <div class="fila-arriba">
+                <div>
+                    <div>Con caché</div>
+                    <div class="detalle" id="detalleCon">Sin cargas</div>
+                </div>
+                <div class="tiempo" id="promedioCon">—</div>
+            </div>
+            <div class="pista"><div class="barra" id="barraCon" style="background: var(--con-cache)"></div></div>
+        </div>
+        <p id="diferencia"></p>
+    </section>
+
+    <div class="cabecera-historial">
+        <h2>Historial</h2>
+        <div class="exportar">
+            <span>Exportar últimas 5 de cada tipo:</span>
+            <a class="boton" href="http://localhost:8080/api/historial/excel">Excel</a>
+            <a class="boton" href="http://localhost:8080/api/historial/pdf">PDF</a>
+            <button class="simple" onclick="borrarHistorial()">Borrar</button>
+        </div>
+    </div>
+    <ol id="historial"></ol>
+    <p id="vacio">Todavía no hay cargas.</p>
+
+    <details>
+        <summary>Ver muestra de los datos leídos</summary>
+        <table>
+            <thead>
+            <tr><th>ID</th><th>Nombre</th><th>Categoría</th><th class="derecha">Precio</th><th class="derecha">Stock</th></tr>
+            </thead>
+            <tbody id="muestra">
+            <tr><td colspan="5" style="color: var(--gris)">Haz una carga para ver los datos.</td></tr>
+            </tbody>
+        </table>
+    </details>
+</main>
+
+<script>
+    const API = "http://localhost:8080/api";
+
+    async function leer(tipo) {
+        bloquearBotones(true);
+        mostrarMensaje("Cargando...");
+        try {
+            const respuesta = await fetch(API + "/productos/" + tipo);
+            const datos = await respuesta.json();
+            const m = datos.medicion;
+            mostrarMensaje(m.tipo + ": " + m.registros + " registros en " + m.tiempoMs.toFixed(2) + " ms");
+            mostrarMuestra(datos.muestra);
+            await cargarHistorial();
+        } catch (error) {
+            mostrarMensaje("No hay conexión con el backend. Revisa que la app de Spring esté corriendo en el puerto 8080.", true);
+        }
+        bloquearBotones(false);
+    }
+
+    async function vaciarCache() {
+        await fetch(API + "/productos/cache", { method: "DELETE" });
+        mostrarMensaje("Caché vaciada. La próxima carga con caché irá a la base de datos.");
+    }
+
+    async function borrarHistorial() {
+        await fetch(API + "/historial", { method: "DELETE" });
+        await cargarHistorial();
+        mostrarMensaje("Historial borrado.");
+    }
+
+    // el historial lo guarda el backend, aqui solo se pide y se dibuja
+    async function cargarHistorial() {
+        const respuesta = await fetch(API + "/historial");
+        const historial = await respuesta.json();
+
+        // igual que en el reporte, se comparan las ultimas 5 cargas de cada tipo
+        const sinCache = historial.filter(m => m.tipo === "Sin caché").slice(-5);
+        const conCache = historial.filter(m => m.tipo === "Con caché").slice(-5);
+        const promedioSin = promedio(sinCache);
+        const promedioCon = promedio(conCache);
+        const mayor = Math.max(promedioSin, promedioCon);
+
+        mostrarPromedio("Sin", promedioSin, sinCache.length, mayor);
+        mostrarPromedio("Con", promedioCon, conCache.length, mayor);
+
+        if (promedioSin > 0 && promedioCon > 0) {
+            const veces = Math.round(promedioSin / promedioCon);
+            document.getElementById("diferencia").innerHTML =
+                "Leer desde la caché es <strong>" + veces + " veces</strong> más rápido.";
+        } else {
+            document.getElementById("diferencia").innerHTML = "";
+        }
+
+        document.getElementById("vacio").hidden = historial.length > 0;
+        let filas = "";
+        for (const m of historial.slice().reverse()) {
+            const color = m.tipo === "Con caché" ? "var(--con-cache)" : "var(--sin-cache)";
+            filas += `<li>
+                <span><span class="punto" style="background: ${color}"></span>${m.numero}. ${m.tipo}</span>
+                <span class="hora">${m.hora}</span>
+                <span class="ms">${m.tiempoMs.toFixed(2)} ms</span>
+            </li>`;
+        }
+        document.getElementById("historial").innerHTML = filas;
+    }
+
+    function promedio(lista) {
+        if (lista.length === 0) return 0;
+        let suma = 0;
+        for (const m of lista) suma += m.tiempoMs;
+        return suma / lista.length;
+    }
+
+    function mostrarPromedio(tipo, valor, cantidad, mayor) {
+        document.getElementById("promedio" + tipo).innerHTML =
+            valor === 0 ? "—" : valor.toFixed(2) + "<small>ms</small>";
+        document.getElementById("detalle" + tipo).textContent =
+            cantidad === 0 ? "Sin cargas" : (cantidad === 1 ? "Promedio de 1 carga" : "Promedio de las últimas " + cantidad + " cargas");
+
+        // la barra es proporcional al tiempo, la de caché casi no se ve y esa es la idea
+        let ancho = 0;
+        if (valor > 0) ancho = Math.max(0.6, valor / mayor * 100);
+        document.getElementById("barra" + tipo).style.width = ancho + "%";
+    }
+
+    function mostrarMuestra(productos) {
+        let filas = "";
+        for (const p of productos) {
+            filas += `<tr>
+                <td>${p.id}</td><td>${p.nombre}</td><td>${p.categoria}</td>
+                <td class="derecha">$${p.precio.toFixed(2)}</td><td class="derecha">${p.stock}</td>
+            </tr>`;
+        }
+        document.getElementById("muestra").innerHTML = filas;
+    }
+
+    function mostrarMensaje(texto, esError = false) {
+        const mensaje = document.getElementById("mensaje");
+        mensaje.textContent = texto;
+        mensaje.className = esError ? "error" : "";
+    }
+
+    function bloquearBotones(bloquear) {
+        document.querySelectorAll("button").forEach(b => b.disabled = bloquear);
+    }
+
+    // al abrir la pagina se muestra lo que ya haya en el historial
+    cargarHistorial().catch(() =>
+        mostrarMensaje("No hay conexión con el backend. Revisa que la app de Spring esté corriendo en el puerto 8080.", true));
+</script>
+</body>
+</html>
